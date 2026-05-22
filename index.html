@@ -9,10 +9,10 @@
   <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { overflow: hidden; background: #000; font-family: -apple-system, sans-serif; }
+    body { overflow: hidden; background: #0f0f0f; font-family: -apple-system, sans-serif; }
 
     #splash {
-      position: fixed; inset: 0; z-index: 100;
+      position: fixed; inset: 0; z-index: 200;
       background: #0f0f0f;
       display: flex; flex-direction: column;
       align-items: center; justify-content: center;
@@ -20,7 +20,6 @@
       transition: opacity 0.5s;
     }
     #splash.hidden { opacity: 0; pointer-events: none; }
-
     .splash-icon {
       width: 72px; height: 72px;
       background: linear-gradient(135deg, #6B5CE7, #4ECDC4);
@@ -29,13 +28,68 @@
     }
     .splash-icon svg { width: 36px; height: 36px; }
     .splash-title { font-size: 22px; font-weight: 600; color: #fff; text-align: center; }
-    .splash-desc  { font-size: 15px; color: #888; text-align: center; line-height: 1.6; max-width: 280px; }
-
+    .splash-desc { font-size: 15px; color: #888; text-align: center; line-height: 1.6; max-width: 280px; }
     .start-btn {
       padding: 16px 40px;
       background: linear-gradient(135deg, #6B5CE7, #4ECDC4);
       color: #fff; border: none; border-radius: 14px;
       font-size: 16px; font-weight: 600; cursor: pointer;
+      margin-top: 8px;
+    }
+
+    #loading {
+      position: fixed; inset: 0; z-index: 150;
+      background: #0f0f0f;
+      display: none;
+      flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 24px; padding: 32px;
+    }
+    #loading.active { display: flex; }
+    .loader-ring {
+      width: 56px; height: 56px;
+      border: 3px solid #222;
+      border-top-color: #6B5CE7;
+      border-radius: 50%;
+      animation: spin 0.9s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loader-title { font-size: 18px; font-weight: 600; color: #fff; text-align: center; }
+    .loader-sub { font-size: 14px; color: #666; text-align: center; line-height: 1.6; max-width: 260px; }
+    .loader-steps { display: flex; flex-direction: column; gap: 10px; width: 100%; max-width: 260px; }
+    .step {
+      display: flex; align-items: center; gap: 12px;
+      font-size: 13px; color: #555;
+      transition: color 0.3s;
+    }
+    .step.done { color: #4ECDC4; }
+    .step.active { color: #fff; }
+    .step-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: #333; flex-shrink: 0;
+      transition: background 0.3s;
+    }
+    .step.done .step-dot { background: #4ECDC4; }
+    .step.active .step-dot { background: #6B5CE7; animation: pulse 1s ease-in-out infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+    #error-screen {
+      position: fixed; inset: 0; z-index: 180;
+      background: #0f0f0f;
+      display: none;
+      flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 16px; padding: 32px; text-align: center;
+    }
+    #error-screen.active { display: flex; }
+    .error-icon { font-size: 48px; }
+    .error-title { font-size: 20px; font-weight: 600; color: #fff; }
+    .error-msg { font-size: 14px; color: #888; line-height: 1.6; max-width: 280px; }
+    .retry-btn {
+      padding: 14px 32px;
+      background: #1a1a1a; border: 1px solid #333;
+      color: #fff; border-radius: 12px;
+      font-size: 15px; font-weight: 600; cursor: pointer;
       margin-top: 8px;
     }
 
@@ -46,30 +100,24 @@
       align-items: center; justify-content: flex-end;
       padding-bottom: 40px;
     }
-
     #hint {
-      background: rgba(0,0,0,0.6);
+      background: rgba(0,0,0,0.65);
       backdrop-filter: blur(8px);
       -webkit-backdrop-filter: blur(8px);
-      color: #fff;
-      padding: 12px 24px;
-      border-radius: 100px;
-      font-size: 14px;
+      color: #fff; padding: 12px 24px;
+      border-radius: 100px; font-size: 14px;
       transition: opacity 0.5s;
-      pointer-events: none;
     }
     #hint.hidden { opacity: 0; }
 
     #found-badge {
       position: fixed; top: 32px; left: 50%; transform: translateX(-50%);
-      background: rgba(78,205,196,0.2);
-      border: 1px solid rgba(78,205,196,0.5);
-      color: #4ECDC4;
-      padding: 8px 20px; border-radius: 100px;
-      font-size: 14px; font-weight: 600;
+      background: rgba(78,205,196,0.15);
+      border: 1px solid rgba(78,205,196,0.4);
+      color: #4ECDC4; padding: 8px 20px;
+      border-radius: 100px; font-size: 14px; font-weight: 600;
       opacity: 0; transition: opacity 0.4s;
-      pointer-events: none; z-index: 20;
-      white-space: nowrap;
+      pointer-events: none; z-index: 20; white-space: nowrap;
     }
     #found-badge.visible { opacity: 1; }
 
@@ -78,7 +126,6 @@
 </head>
 <body>
 
-<!-- Стартовый экран -->
 <div id="splash">
   <div class="splash-icon">
     <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
@@ -87,18 +134,43 @@
       <path d="M2 12l10 5 10-5"/>
     </svg>
   </div>
-  <div class="splash-title">Наведите на маркер</div>
-  <div class="splash-desc">Разрешите доступ к камере и наведите телефон на карточку с изображением</div>
+  <div class="splash-title">AR Viewer</div>
+  <div class="splash-desc">Наведите камеру на карточку с изображением — 3D модель появится прямо на ней</div>
   <button class="start-btn" onclick="startAR()">Открыть камеру</button>
 </div>
 
-<!-- UI поверх камеры -->
+<div id="loading">
+  <div class="loader-ring"></div>
+  <div class="loader-title">Загружаем AR…</div>
+  <div class="loader-steps">
+    <div class="step active" id="step-cam">
+      <div class="step-dot"></div>Запрос камеры
+    </div>
+    <div class="step" id="step-model">
+      <div class="step-dot"></div>Загрузка 3D модели
+    </div>
+    <div class="step" id="step-marker">
+      <div class="step-dot"></div>Загрузка маркера
+    </div>
+    <div class="step" id="step-ready">
+      <div class="step-dot"></div>Готово
+    </div>
+  </div>
+  <div class="loader-sub" id="loading-note">Это займёт 10–30 секунд</div>
+</div>
+
+<div id="error-screen">
+  <div class="error-icon">📷</div>
+  <div class="error-title" id="error-title">Нет доступа к камере</div>
+  <div class="error-msg" id="error-msg">Разрешите доступ к камере в настройках браузера и попробуйте снова</div>
+  <button class="retry-btn" onclick="location.reload()">Попробовать снова</button>
+</div>
+
 <div id="ui">
   <div id="hint">Наведите камеру на маркер</div>
 </div>
 <div id="found-badge">Маркер найден</div>
 
-<!-- AR сцена -->
 <a-scene
   id="ar-scene"
   mindar-image="imageTargetSrc: targets.mind; autoStart: false; uiLoading: no; uiScanning: no; uiError: no;"
@@ -108,56 +180,76 @@
   device-orientation-permission-ui="enabled: false"
   style="display:none"
 >
-  <a-assets>
-    <!-- Замените model.glb на имя вашего файла -->
+  <a-assets timeout="30000">
     <a-asset-item id="model" src="model.glb"></a-asset-item>
   </a-assets>
 
   <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
 
   <a-entity mindar-image-target="targetIndex: 0">
-    <!--
-      position="0 0 0.1"  — чуть приподнят над маркером
-      rotation="-90 0 0"  — повернут (GLB обычно лежит, так встаёт вертикально)
-      scale="0.15 0.15 0.15" — размер: подберите под вашу модель (0.1 = маленький, 0.3 = большой)
-
-      Размер маркера на печати = 1 единица.
-      Если маркер 10см, то scale 0.15 = модель ~1.5см.
-      Если маркер 20см, то scale 0.15 = модель ~3см.
-      Увеличьте scale чтобы модель была крупнее.
-    -->
     <a-gltf-model
       id="ar-model"
       src="#model"
-      rotation="-90 0 0"
+      position="0 0 0.1"
       rotation="-90 0 0"
       scale="0.15 0.15 0.15"
       animation-mixer
     ></a-gltf-model>
   </a-entity>
-
 </a-scene>
 
 <script>
-  let arStarted = false;
+function setStep(id) {
+  ['step-cam','step-model','step-marker','step-ready'].forEach(s => {
+    const el = document.getElementById(s);
+    el.classList.remove('active','done');
+    if (s === id) el.classList.add('active');
+    else if (['step-cam','step-model','step-marker','step-ready'].indexOf(s) <
+             ['step-cam','step-model','step-marker','step-ready'].indexOf(id))
+      el.classList.add('done');
+  });
+}
 
-  function startAR() {
-    document.getElementById('splash').classList.add('hidden');
-    document.getElementById('ar-scene').style.display = 'block';
+function showError(title, msg) {
+  document.getElementById('loading').classList.remove('active');
+  document.getElementById('error-title').textContent = title;
+  document.getElementById('error-msg').textContent = msg;
+  document.getElementById('error-screen').classList.add('active');
+}
 
-    setTimeout(() => {
+function startAR() {
+  document.getElementById('splash').classList.add('hidden');
+  document.getElementById('loading').classList.add('active');
+  setStep('step-cam');
+
+  navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+    .then(stream => {
+      stream.getTracks().forEach(t => t.stop());
+      setStep('step-model');
+
+      document.getElementById('ar-scene').style.display = 'block';
       const scene = document.querySelector('a-scene');
+
       scene.addEventListener('loaded', () => {
+        setStep('step-marker');
         const mindarSystem = scene.systems['mindar-image-system'];
-        if (mindarSystem) {
-          mindarSystem.start();
-          arStarted = true;
+        if (!mindarSystem) {
+          showError('Ошибка инициализации', 'MindAR не загрузился. Проверьте файл targets.mind рядом с index.html.');
+          return;
         }
+        mindarSystem.start();
+
+        setTimeout(() => {
+          setStep('step-ready');
+          setTimeout(() => {
+            document.getElementById('loading').classList.remove('active');
+          }, 600);
+        }, 1500);
       });
 
-      // Следим за обнаружением маркера
-      const target = document.querySelector('[mindar-image-target]');
-      if (target) {
+      scene.addEventListener('loaded', () => {
+        const target = document.querySelector('[mindar-image-target]');
+        if (!target) return;
         target.addEventListener('targetFound', () => {
           document.getElementById('hint').classList.add('hidden');
           const badge = document.getElementById('found-badge');
@@ -167,9 +259,18 @@
         target.addEventListener('targetLost', () => {
           document.getElementById('hint').classList.remove('hidden');
         });
+      }, { once: true });
+    })
+    .catch(err => {
+      if (err.name === 'NotAllowedError') {
+        showError('Нет доступа к камере', 'Нажмите на замок в адресной строке → Настройки сайта → Камера → Разрешить. Затем перезагрузите страницу.');
+      } else if (err.name === 'NotFoundError') {
+        showError('Камера не найдена', 'Убедитесь что на устройстве есть камера и попробуйте снова.');
+      } else {
+        showError('Ошибка камеры', 'Код: ' + err.name + '. Попробуйте перезагрузить страницу.');
       }
-    }, 100);
-  }
+    });
+}
 </script>
 </body>
 </html>
