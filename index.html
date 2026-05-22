@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Просмотр в AR</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #0f0f0f;
+      color: #fff;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    .card {
+      background: #1a1a1a;
+      border: 1px solid #2a2a2a;
+      border-radius: 20px;
+      padding: 40px 32px;
+      max-width: 360px;
+      width: 100%;
+      text-align: center;
+    }
+    .icon {
+      width: 72px;
+      height: 72px;
+      background: linear-gradient(135deg, #6B5CE7, #4ECDC4);
+      border-radius: 18px;
+      margin: 0 auto 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .icon svg { width: 36px; height: 36px; }
+    h1 {
+      font-size: 22px;
+      font-weight: 600;
+      margin-bottom: 10px;
+      letter-spacing: -0.3px;
+    }
+    p {
+      font-size: 15px;
+      color: #888;
+      line-height: 1.6;
+      margin-bottom: 32px;
+    }
+    .btn {
+      display: block;
+      width: 100%;
+      padding: 16px;
+      border-radius: 12px;
+      font-size: 16px;
+      font-weight: 600;
+      text-decoration: none;
+      cursor: pointer;
+      border: none;
+      transition: opacity 0.15s;
+    }
+    .btn:active { opacity: 0.75; }
+    .btn-primary {
+      background: linear-gradient(135deg, #6B5CE7, #4ECDC4);
+      color: #fff;
+    }
+    .btn-secondary {
+      background: #2a2a2a;
+      color: #ccc;
+      margin-top: 12px;
+      font-size: 14px;
+      font-weight: 500;
+    }
+    .badge {
+      display: inline-block;
+      font-size: 12px;
+      padding: 4px 10px;
+      border-radius: 20px;
+      margin-bottom: 24px;
+    }
+    .badge-ios    { background: #1a1a2e; color: #a78bfa; border: 1px solid #3d2f6e; }
+    .badge-android{ background: #0d2318; color: #4ade80; border: 1px solid #1a4d33; }
+    .badge-other  { background: #1e1e1e; color: #888;    border: 1px solid #333; }
+    .instructions {
+      background: #111;
+      border-radius: 12px;
+      padding: 16px;
+      margin-top: 20px;
+      text-align: left;
+      font-size: 13px;
+      color: #666;
+      line-height: 1.7;
+    }
+    .instructions b { color: #999; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+        <path d="M2 17l10 5 10-5"/>
+        <path d="M2 12l10 5 10-5"/>
+      </svg>
+    </div>
+    <div id="badge" class="badge">Определение устройства…</div>
+    <h1 id="title">Открыть в AR</h1>
+    <p id="desc">Загружаем параметры для вашего устройства…</p>
+    <a id="ar-btn" class="btn btn-primary" href="#">Смотреть в AR</a>
+    <a id="fallback-btn" class="btn btn-secondary" href="model.glb" download style="display:none">
+      Скачать 3D модель
+    </a>
+    <div class="instructions" id="hint" style="display:none"></div>
+  </div>
+
+  <script>
+    // ─── НАСТРОЙКИ ────────────────────────────────────────────────────
+    // Замените пути на свои файлы после загрузки на GitHub Pages
+    const GLB_URL  = 'model.glb';   // для Android
+    const USDZ_URL = 'model.usdz';  // для iOS
+    // ─────────────────────────────────────────────────────────────────
+
+    const ua = navigator.userAgent.toLowerCase();
+    const isIOS     = /iphone|ipad|ipod/.test(ua);
+    const isAndroid = /android/.test(ua);
+
+    const badge    = document.getElementById('badge');
+    const title    = document.getElementById('title');
+    const desc     = document.getElementById('desc');
+    const btn      = document.getElementById('ar-btn');
+    const fallback = document.getElementById('fallback-btn');
+    const hint     = document.getElementById('hint');
+
+    if (isIOS) {
+      badge.className = 'badge badge-ios';
+      badge.textContent = '🍎 iOS · Quick Look AR';
+      title.textContent = 'Открыть в AR';
+      desc.textContent  = 'Safari откроет 3D модель прямо в вашем пространстве через камеру.';
+
+      // iOS Quick Look требует специального <a rel="ar">
+      btn.outerHTML = `
+        <a id="ar-btn" rel="ar" href="${USDZ_URL}" class="btn btn-primary">
+          <img src="" style="display:none">
+          Смотреть в AR
+        </a>`;
+
+      hint.style.display = 'block';
+      hint.innerHTML = '<b>Как это работает:</b> нажмите кнопку → Safari покажет 3D модель → нажмите иконку AR в правом нижнем углу для режима камеры.';
+
+    } else if (isAndroid) {
+      badge.className = 'badge badge-android';
+      badge.textContent = '🤖 Android · Scene Viewer';
+      title.textContent = 'Открыть в AR';
+      desc.textContent  = 'Google Scene Viewer откроет 3D модель в вашем пространстве через камеру.';
+
+      const fullUrl = new URL(GLB_URL, window.location.href).href;
+      const sceneViewerUrl = `intent://arvr.google.com/scene-viewer/1.0?file=${encodeURIComponent(fullUrl)}&mode=ar_preferred#Intent;scheme=https;package=com.google.android.googlequicksearchbox;action=android.intent.action.VIEW;S.browser_fallback_url=${encodeURIComponent(fullUrl)};end;`;
+
+      btn.href = sceneViewerUrl;
+
+      hint.style.display = 'block';
+      hint.innerHTML = '<b>Как это работает:</b> нажмите кнопку → Google откроет 3D модель → поводите телефоном по полу чтобы найти поверхность → модель появится в вашем пространстве.';
+
+    } else {
+      badge.className = 'badge badge-other';
+      badge.textContent = '💻 Десктоп';
+      title.textContent = '3D модель';
+      desc.textContent  = 'AR доступен только с мобильного устройства. Вы можете скачать файл модели.';
+
+      btn.textContent = 'Скачать GLB';
+      btn.href = GLB_URL;
+      btn.setAttribute('download', '');
+
+      fallback.style.display = 'block';
+      fallback.href = USDZ_URL;
+      fallback.textContent = 'Скачать USDZ (для iOS)';
+    }
+  </script>
+</body>
+</html>
