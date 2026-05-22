@@ -2,180 +2,174 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Просмотр в AR</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>AR Viewer</title>
+  <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image.prod.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/aframe@1.4.2/dist/aframe.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    body { overflow: hidden; background: #000; font-family: -apple-system, sans-serif; }
+
+    #splash {
+      position: fixed; inset: 0; z-index: 100;
       background: #0f0f0f;
-      color: #fff;
-      min-height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 24px;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 20px; padding: 32px;
+      transition: opacity 0.5s;
     }
-    .card {
-      background: #1a1a1a;
-      border: 1px solid #2a2a2a;
-      border-radius: 20px;
-      padding: 40px 32px;
-      max-width: 360px;
-      width: 100%;
-      text-align: center;
-    }
-    .icon {
-      width: 72px;
-      height: 72px;
+    #splash.hidden { opacity: 0; pointer-events: none; }
+
+    .splash-icon {
+      width: 72px; height: 72px;
       background: linear-gradient(135deg, #6B5CE7, #4ECDC4);
       border-radius: 18px;
-      margin: 0 auto 24px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
+      display: flex; align-items: center; justify-content: center;
     }
-    .icon svg { width: 36px; height: 36px; }
-    h1 {
-      font-size: 22px;
-      font-weight: 600;
-      margin-bottom: 10px;
-      letter-spacing: -0.3px;
-    }
-    p {
-      font-size: 15px;
-      color: #888;
-      line-height: 1.6;
-      margin-bottom: 32px;
-    }
-    .btn {
-      display: block;
-      width: 100%;
-      padding: 16px;
-      border-radius: 12px;
-      font-size: 16px;
-      font-weight: 600;
-      text-decoration: none;
-      cursor: pointer;
-      border: none;
-      transition: opacity 0.15s;
-    }
-    .btn:active { opacity: 0.75; }
-    .btn-primary {
+    .splash-icon svg { width: 36px; height: 36px; }
+    .splash-title { font-size: 22px; font-weight: 600; color: #fff; text-align: center; }
+    .splash-desc  { font-size: 15px; color: #888; text-align: center; line-height: 1.6; max-width: 280px; }
+
+    .start-btn {
+      padding: 16px 40px;
       background: linear-gradient(135deg, #6B5CE7, #4ECDC4);
+      color: #fff; border: none; border-radius: 14px;
+      font-size: 16px; font-weight: 600; cursor: pointer;
+      margin-top: 8px;
+    }
+
+    #ui {
+      position: fixed; inset: 0; z-index: 10;
+      pointer-events: none;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: flex-end;
+      padding-bottom: 40px;
+    }
+
+    #hint {
+      background: rgba(0,0,0,0.6);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
       color: #fff;
-    }
-    .btn-secondary {
-      background: #2a2a2a;
-      color: #ccc;
-      margin-top: 12px;
+      padding: 12px 24px;
+      border-radius: 100px;
       font-size: 14px;
-      font-weight: 500;
+      transition: opacity 0.5s;
+      pointer-events: none;
     }
-    .badge {
-      display: inline-block;
-      font-size: 12px;
-      padding: 4px 10px;
-      border-radius: 20px;
-      margin-bottom: 24px;
+    #hint.hidden { opacity: 0; }
+
+    #found-badge {
+      position: fixed; top: 32px; left: 50%; transform: translateX(-50%);
+      background: rgba(78,205,196,0.2);
+      border: 1px solid rgba(78,205,196,0.5);
+      color: #4ECDC4;
+      padding: 8px 20px; border-radius: 100px;
+      font-size: 14px; font-weight: 600;
+      opacity: 0; transition: opacity 0.4s;
+      pointer-events: none; z-index: 20;
+      white-space: nowrap;
     }
-    .badge-ios    { background: #1a1a2e; color: #a78bfa; border: 1px solid #3d2f6e; }
-    .badge-android{ background: #0d2318; color: #4ade80; border: 1px solid #1a4d33; }
-    .badge-other  { background: #1e1e1e; color: #888;    border: 1px solid #333; }
-    .instructions {
-      background: #111;
-      border-radius: 12px;
-      padding: 16px;
-      margin-top: 20px;
-      text-align: left;
-      font-size: 13px;
-      color: #666;
-      line-height: 1.7;
-    }
-    .instructions b { color: #999; }
+    #found-badge.visible { opacity: 1; }
+
+    a-scene { width: 100vw !important; height: 100vh !important; }
   </style>
 </head>
 <body>
-  <div class="card">
-    <div class="icon">
-      <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M12 2L2 7l10 5 10-5-10-5z"/>
-        <path d="M2 17l10 5 10-5"/>
-        <path d="M2 12l10 5 10-5"/>
-      </svg>
-    </div>
-    <div id="badge" class="badge">Определение устройства…</div>
-    <h1 id="title">Открыть в AR</h1>
-    <p id="desc">Загружаем параметры для вашего устройства…</p>
-    <a id="ar-btn" class="btn btn-primary" href="#">Смотреть в AR</a>
-    <a id="fallback-btn" class="btn btn-secondary" href="model.glb" download style="display:none">
-      Скачать 3D модель
-    </a>
-    <div class="instructions" id="hint" style="display:none"></div>
+
+<!-- Стартовый экран -->
+<div id="splash">
+  <div class="splash-icon">
+    <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+      <path d="M2 17l10 5 10-5"/>
+      <path d="M2 12l10 5 10-5"/>
+    </svg>
   </div>
+  <div class="splash-title">Наведите на маркер</div>
+  <div class="splash-desc">Разрешите доступ к камере и наведите телефон на карточку с изображением</div>
+  <button class="start-btn" onclick="startAR()">Открыть камеру</button>
+</div>
 
-  <script>
-    // ─── НАСТРОЙКИ ────────────────────────────────────────────────────
-    // Замените пути на свои файлы после загрузки на GitHub Pages
-    const GLB_URL  = 'model.glb';   // для Android
-    const USDZ_URL = 'model.usdz';  // для iOS
-    // ─────────────────────────────────────────────────────────────────
+<!-- UI поверх камеры -->
+<div id="ui">
+  <div id="hint">Наведите камеру на маркер</div>
+</div>
+<div id="found-badge">Маркер найден</div>
 
-    const ua = navigator.userAgent.toLowerCase();
-    const isIOS     = /iphone|ipad|ipod/.test(ua);
-    const isAndroid = /android/.test(ua);
+<!-- AR сцена -->
+<a-scene
+  id="ar-scene"
+  mindar-image="imageTargetSrc: targets.mind; autoStart: false; uiLoading: no; uiScanning: no; uiError: no;"
+  color-space="sRGB"
+  renderer="colorManagement: true; physicallyCorrectLights: true"
+  vr-mode-ui="enabled: false"
+  device-orientation-permission-ui="enabled: false"
+  style="display:none"
+>
+  <a-assets>
+    <!-- Замените model.glb на имя вашего файла -->
+    <a-asset-item id="model" src="model.glb"></a-asset-item>
+  </a-assets>
 
-    const badge    = document.getElementById('badge');
-    const title    = document.getElementById('title');
-    const desc     = document.getElementById('desc');
-    const btn      = document.getElementById('ar-btn');
-    const fallback = document.getElementById('fallback-btn');
-    const hint     = document.getElementById('hint');
+  <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
 
-    if (isIOS) {
-      badge.className = 'badge badge-ios';
-      badge.textContent = '🍎 iOS · Quick Look AR';
-      title.textContent = 'Открыть в AR';
-      desc.textContent  = 'Safari откроет 3D модель прямо в вашем пространстве через камеру.';
+  <a-entity mindar-image-target="targetIndex: 0">
+    <!--
+      position="0 0 0.1"  — чуть приподнят над маркером
+      rotation="-90 0 0"  — повернут (GLB обычно лежит, так встаёт вертикально)
+      scale="0.15 0.15 0.15" — размер: подберите под вашу модель (0.1 = маленький, 0.3 = большой)
 
-      // iOS Quick Look требует специального <a rel="ar">
-      btn.outerHTML = `
-        <a id="ar-btn" rel="ar" href="${USDZ_URL}" class="btn btn-primary">
-          <img src="" style="display:none">
-          Смотреть в AR
-        </a>`;
+      Размер маркера на печати = 1 единица.
+      Если маркер 10см, то scale 0.15 = модель ~1.5см.
+      Если маркер 20см, то scale 0.15 = модель ~3см.
+      Увеличьте scale чтобы модель была крупнее.
+    -->
+    <a-gltf-model
+      id="ar-model"
+      src="#model"
+      position="0 0 0.1"
+      rotation="-90 0 0"
+      scale="0.15 0.15 0.15"
+      animation-mixer
+    ></a-gltf-model>
+  </a-entity>
 
-      hint.style.display = 'block';
-      hint.innerHTML = '<b>Как это работает:</b> нажмите кнопку → Safari покажет 3D модель → нажмите иконку AR в правом нижнем углу для режима камеры.';
+</a-scene>
 
-    } else if (isAndroid) {
-      badge.className = 'badge badge-android';
-      badge.textContent = '🤖 Android · Scene Viewer';
-      title.textContent = 'Открыть в AR';
-      desc.textContent  = 'Google Scene Viewer откроет 3D модель в вашем пространстве через камеру.';
+<script>
+  let arStarted = false;
 
-      const fullUrl = new URL(GLB_URL, window.location.href).href;
-      const sceneViewerUrl = `intent://arvr.google.com/scene-viewer/1.0?file=${encodeURIComponent(fullUrl)}&mode=ar_preferred#Intent;scheme=https;package=com.google.android.googlequicksearchbox;action=android.intent.action.VIEW;S.browser_fallback_url=${encodeURIComponent(fullUrl)};end;`;
+  function startAR() {
+    document.getElementById('splash').classList.add('hidden');
+    document.getElementById('ar-scene').style.display = 'block';
 
-      btn.href = sceneViewerUrl;
+    setTimeout(() => {
+      const scene = document.querySelector('a-scene');
+      scene.addEventListener('loaded', () => {
+        const mindarSystem = scene.systems['mindar-image-system'];
+        if (mindarSystem) {
+          mindarSystem.start();
+          arStarted = true;
+        }
+      });
 
-      hint.style.display = 'block';
-      hint.innerHTML = '<b>Как это работает:</b> нажмите кнопку → Google откроет 3D модель → поводите телефоном по полу чтобы найти поверхность → модель появится в вашем пространстве.';
-
-    } else {
-      badge.className = 'badge badge-other';
-      badge.textContent = '💻 Десктоп';
-      title.textContent = '3D модель';
-      desc.textContent  = 'AR доступен только с мобильного устройства. Вы можете скачать файл модели.';
-
-      btn.textContent = 'Скачать GLB';
-      btn.href = GLB_URL;
-      btn.setAttribute('download', '');
-
-      fallback.style.display = 'block';
-      fallback.href = USDZ_URL;
-      fallback.textContent = 'Скачать USDZ (для iOS)';
-    }
-  </script>
+      // Следим за обнаружением маркера
+      const target = document.querySelector('[mindar-image-target]');
+      if (target) {
+        target.addEventListener('targetFound', () => {
+          document.getElementById('hint').classList.add('hidden');
+          const badge = document.getElementById('found-badge');
+          badge.classList.add('visible');
+          setTimeout(() => badge.classList.remove('visible'), 2000);
+        });
+        target.addEventListener('targetLost', () => {
+          document.getElementById('hint').classList.remove('hidden');
+        });
+      }
+    }, 100);
+  }
+</script>
 </body>
 </html>
