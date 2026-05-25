@@ -5,10 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
   <title>AR Viewer</title>
 
-  <!-- Three.js + MindAR без A-Frame -->
-  <script src="https://cdn.jsdelivr.net/npm/three@0.154.0/build/three.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.154.0/examples/js/loaders/GLTFLoader.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-three.prod.js"></script>
+  <!-- MindAR со встроенным Three.js (всё в одном файле) -->
+  <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.2/dist/mindar-image-three.prod.js"></script>
 
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -22,13 +20,11 @@
       gap: 20px; padding: 32px; text-align: center;
     }
     #splash.hidden { display: none; }
-
     .icon {
       width: 72px; height: 72px;
       background: linear-gradient(135deg, #6B5CE7, #4ECDC4);
       border-radius: 18px;
       display: flex; align-items: center; justify-content: center;
-      margin: 0 auto;
     }
     .icon svg { width: 36px; height: 36px; }
     h1 { font-size: 22px; font-weight: 600; color: #fff; }
@@ -43,8 +39,7 @@
     #loading {
       position: fixed; inset: 0; z-index: 90;
       background: #0f0f0f;
-      display: none;
-      flex-direction: column;
+      display: none; flex-direction: column;
       align-items: center; justify-content: center;
       gap: 16px; text-align: center; padding: 32px;
     }
@@ -62,15 +57,14 @@
     #error {
       position: fixed; inset: 0; z-index: 95;
       background: #0f0f0f;
-      display: none;
-      flex-direction: column;
+      display: none; flex-direction: column;
       align-items: center; justify-content: center;
       gap: 16px; text-align: center; padding: 32px;
     }
     #error.show { display: flex; }
     #error h2 { font-size: 20px; color: #fff; }
-    #error p  { font-size: 14px; color: #888; max-width: 280px; line-height: 1.6; }
-    #error .btn { background: #222; margin-top: 8px; }
+    #error p  { font-size: 14px; color: #888; max-width: 280px; line-height: 1.6; font-family: monospace; }
+    #error .btn { background: #222; }
 
     #hint {
       position: fixed; bottom: 40px; left: 50%; transform: translateX(-50%);
@@ -78,8 +72,7 @@
       backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
       color: #fff; padding: 12px 24px; border-radius: 100px;
       font-size: 14px; pointer-events: none; z-index: 50;
-      white-space: nowrap;
-      display: none;
+      white-space: nowrap; display: none;
     }
     #hint.show { display: block; }
 
@@ -91,8 +84,6 @@
       white-space: nowrap; opacity: 0; transition: opacity 0.4s;
     }
     #badge.show { opacity: 1; }
-
-    canvas { display: block; }
   </style>
 </head>
 <body>
@@ -117,20 +108,28 @@
 </div>
 
 <div id="error">
-  <h2 id="error-title">Ошибка</h2>
-  <p id="error-msg">Что-то пошло не так</p>
+  <h2>Ошибка</h2>
+  <p id="error-msg"></p>
   <button class="btn" onclick="location.reload()">Попробовать снова</button>
 </div>
 
-<div id="hint" class="show">Наведите камеру на маркер</div>
+<div id="hint">Наведите камеру на маркер</div>
 <div id="badge">Маркер найден</div>
 
 <script>
-const setStatus = t => document.getElementById('loading-status').textContent = t;
+// ─── НАСТРОЙКИ ────────────────────────────────────────
+const MODEL_URL  = 'model.glb';
+const TARGET_URL = 'targets.mind';
+const MODEL_SCALE    = 0.15;
+const MODEL_POSITION = { x: 0, y: 0, z: 0 };
+const MODEL_ROTATION = { x: 0, y: 0, z: 0 }; // градусы
+// ──────────────────────────────────────────────────────
 
-function showError(title, msg) {
+function setStatus(t) {
+  document.getElementById('loading-status').textContent = t;
+}
+function showError(msg) {
   document.getElementById('loading').classList.remove('show');
-  document.getElementById('error-title').textContent = title;
   document.getElementById('error-msg').textContent = msg;
   document.getElementById('error').classList.add('show');
 }
@@ -140,28 +139,26 @@ async function startAR() {
   document.getElementById('loading').classList.add('show');
   setStatus('Запрос камеры…');
 
+  // Проверяем что библиотека загрузилась
+  if (typeof MindARThree === 'undefined') {
+    showError('MindAR не загрузился. Проверьте интернет-соединение.');
+    return;
+  }
+
   // Проверяем камеру
   try {
-    const s = await navigator.mediaDevices.getUserMedia({ video: true });
+    const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
     s.getTracks().forEach(t => t.stop());
   } catch(e) {
-    showError('Нет доступа к камере', 'Разрешите доступ к камере в настройках браузера и перезагрузите страницу.');
+    showError('Нет доступа к камере: ' + e.name + '. Разрешите доступ в настройках браузера.');
     return;
   }
 
   setStatus('Запуск MindAR…');
 
-  // ─── НАСТРОЙКИ ───────────────────────────────────
-  const MODEL_URL  = 'model.glb';     // ← имя вашего GLB файла
-  const TARGET_URL = 'targets.mind';  // ← скомпилированный маркер
-  const MODEL_SCALE    = 0.15;        // ← размер модели
-  const MODEL_POSITION = [0, 0, 0];   // ← сдвиг [x, y, z]
-  const MODEL_ROTATION = [0, 0, 0];   // ← поворот в градусах [x, y, z]
-  // ─────────────────────────────────────────────────
-
   let mindarThree;
   try {
-    mindarThree = new window.MINDAR.IMAGE.MindARThree({
+    mindarThree = new MindARThree({
       container: document.body,
       imageTargetSrc: TARGET_URL,
       uiLoading: 'no',
@@ -169,55 +166,56 @@ async function startAR() {
       uiError: 'no',
     });
   } catch(e) {
-    showError('Ошибка MindAR', e.message);
+    showError('Ошибка инициализации: ' + e.message);
     return;
   }
 
   const { renderer, scene, camera } = mindarThree;
 
   // Освещение
-  scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 1.2));
-  const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
-  dirLight.position.set(1, 2, 1);
-  scene.add(dirLight);
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 1.5));
+  const dir = new THREE.DirectionalLight(0xffffff, 1);
+  dir.position.set(1, 2, 1);
+  scene.add(dir);
 
   // Якорь на маркер
   const anchor = mindarThree.addAnchor(0);
 
-  // Загрузка GLB
-  setStatus('Загрузка 3D модели…');
+  // Загрузка модели
+  setStatus('Загрузка модели…');
   try {
     const loader = new THREE.GLTFLoader();
-    const gltf = await new Promise((res, rej) => {
-      loader.load(MODEL_URL, res, undefined, rej);
+    const gltf = await new Promise((resolve, reject) => {
+      loader.load(MODEL_URL, resolve, undefined, reject);
     });
 
     const model = gltf.scene;
     model.scale.setScalar(MODEL_SCALE);
-    model.position.set(...MODEL_POSITION);
+    model.position.set(MODEL_POSITION.x, MODEL_POSITION.y, MODEL_POSITION.z);
     model.rotation.set(
-      THREE.MathUtils.degToRad(MODEL_ROTATION[0]),
-      THREE.MathUtils.degToRad(MODEL_ROTATION[1]),
-      THREE.MathUtils.degToRad(MODEL_ROTATION[2])
+      THREE.MathUtils.degToRad(MODEL_ROTATION.x),
+      THREE.MathUtils.degToRad(MODEL_ROTATION.y),
+      THREE.MathUtils.degToRad(MODEL_ROTATION.z)
     );
     anchor.group.add(model);
 
-    // Анимации если есть
-    if (gltf.animations && gltf.animations.length > 0) {
+    // Анимации
+    if (gltf.animations.length > 0) {
       const mixer = new THREE.AnimationMixer(model);
       gltf.animations.forEach(clip => mixer.clipAction(clip).play());
       const clock = new THREE.Clock();
+      const origLoop = renderer.setAnimationLoop.bind(renderer);
       renderer.setAnimationLoop(() => {
         mixer.update(clock.getDelta());
-        mindarThree.renderer.render(scene, camera);
+        renderer.render(scene, camera);
       });
     }
   } catch(e) {
-    showError('Ошибка загрузки модели', 'Проверьте что файл model.glb лежит рядом с index.html. Ошибка: ' + e.message);
+    showError('Не удалось загрузить model.glb: ' + e.message);
     return;
   }
 
-  // События маркера
+  // События
   anchor.onTargetFound = () => {
     document.getElementById('hint').classList.remove('show');
     document.getElementById('badge').classList.add('show');
@@ -227,12 +225,12 @@ async function startAR() {
     document.getElementById('hint').classList.add('show');
   };
 
-  // Старт
+  // Старт камеры
   setStatus('Запуск камеры…');
   try {
     await mindarThree.start();
   } catch(e) {
-    showError('Ошибка запуска', e.message);
+    showError('Ошибка запуска камеры: ' + e.message);
     return;
   }
 
