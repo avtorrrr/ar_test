@@ -27,13 +27,25 @@
     }
     .splash-icon svg { width: 36px; height: 36px; }
     .splash-title { font-size: 22px; font-weight: 600; color: #fff; text-align: center; }
-    .splash-desc { font-size: 15px; color: #888; text-align: center; line-height: 1.6; max-width: 280px; }
+    .splash-desc  { font-size: 15px; color: #888; text-align: center; line-height: 1.6; max-width: 280px; }
     .start-btn {
       padding: 16px 40px;
       background: linear-gradient(135deg, #6B5CE7, #4ECDC4);
       color: #fff; border: none; border-radius: 14px;
       font-size: 16px; font-weight: 600; cursor: pointer;
     }
+
+    /* iOS требует кнопку для разрешения гироскопа */
+    #gyro-prompt {
+      position: fixed; inset: 0; z-index: 110;
+      background: #0f0f0f;
+      display: none; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 20px; padding: 32px; text-align: center;
+    }
+    #gyro-prompt.show { display: flex; }
+    #gyro-prompt h2 { font-size: 20px; font-weight: 600; color: #fff; }
+    #gyro-prompt p  { font-size: 14px; color: #888; line-height: 1.6; max-width: 260px; }
 
     #hint {
       position: fixed; bottom: 40px; left: 50%; transform: translateX(-50%);
@@ -70,7 +82,20 @@
   </div>
   <div class="splash-title">AR Viewer</div>
   <div class="splash-desc">Наведите камеру на карточку — 3D модель появится прямо на ней</div>
-  <button class="start-btn" onclick="startAR()">Открыть камеру</button>
+  <button class="start-btn" onclick="requestGyroThenStart()">Открыть камеру</button>
+</div>
+
+<!-- Запрос гироскопа на iOS -->
+<div id="gyro-prompt">
+  <div class="splash-icon">
+    <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="10"/>
+      <path d="M12 8v4l3 3"/>
+    </svg>
+  </div>
+  <h2>Разрешите датчики</h2>
+  <p>Для стабильного AR нужен доступ к гироскопу и акселерометру</p>
+  <button class="start-btn" onclick="grantGyro()">Разрешить</button>
 </div>
 
 <div id="hint" class="hidden">Наведите камеру на маркер</div>
@@ -78,7 +103,7 @@
 
 <a-scene
   id="ar-scene"
-  mindar-image="imageTargetSrc: targets.mind; autoStart: false; uiLoading: no; uiScanning: no; uiError: no;"
+  mindar-image="imageTargetSrc: targets.mind; autoStart: false; uiLoading: no; uiScanning: no; uiError: no; filterMinCF: 0.001; filterBeta: 1000; missTolerance: 10;"
   color-space="sRGB"
   renderer="colorManagement: true; physicallyCorrectLights: true"
   vr-mode-ui="enabled: false"
@@ -88,13 +113,8 @@
   <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
 
   <a-entity mindar-image-target="targetIndex: 0">
-    <!--
-      Меняйте эти параметры под вашу модель:
-      scale — размер (1 = размер маркера, 0.5 = половина маркера)
-      rotation — поворот в градусах
-      position — смещение (третье число = высота над маркером)
-    -->
     <a-gltf-model
+      id="ar-model"
       src="model.glb"
       position="0 0 0.3"
       rotation="90 0 0"
@@ -106,37 +126,121 @@
 </a-scene>
 
 <script>
-function startAR() {
-  document.getElementById('splash').classList.add('hidden');
-  document.getElementById('ar-scene').style.display = 'block';
-  document.getElementById('hint').classList.remove('hidden');
+  // Последняя известная позиция и поворот модели
+  let lastPosition = { x: 0, y: 0, z: 0.3 };
+  let lastQuaternion = null;
+  let gyroActive = false;
+  let markerFound = false;
 
-  const scene = document.querySelector('a-scene');
+  // Накопленный поворот от гироскопа с момента потери маркера
+  let gyroBaseQuaternion = null;
+  let deviceQuaternionAtLoss = null;
 
-  const launch = () => {
-    const sys = scene.systems['mindar-image-system'];
-    if (sys) sys.start();
-
-    const target = document.querySelector('[mindar-image-target]');
-    if (target) {
-      target.addEventListener('targetFound', () => {
-        document.getElementById('hint').classList.add('hidden');
-        const b = document.getElementById('found-badge');
-        b.classList.add('visible');
-        setTimeout(() => b.classList.remove('visible'), 2000);
-      });
-      target.addEventListener('targetLost', () => {
-        document.getElementById('hint').classList.remove('hidden');
-      });
-    }
-  };
-
-  if (scene.hasLoaded) {
-    launch();
-  } else {
-    scene.addEventListener('loaded', launch);
+  function getDeviceQuaternion() {
+    // Читаем текущий поворот устройства через A-Frame камеру
+    const cam = document.querySelector('a-camera');
+    if (!cam) return null;
+    const q = new THREE.Quaternion();
+    cam.object3D.getWorldQuaternion(q);
+    return q;
   }
-}
+
+  function requestGyroThenStart() {
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    if (isIOS && typeof DeviceOrientationEvent !== 'undefined' &&
+        typeof DeviceOrientationEvent.requestPermission === 'function') {
+      document.getElementById('gyro-prompt').classList.add('show');
+    } else {
+      startAR();
+    }
+  }
+
+  function grantGyro() {
+    DeviceOrientationEvent.requestPermission()
+      .then(state => {
+        document.getElementById('gyro-prompt').classList.remove('show');
+        startAR();
+      })
+      .catch(() => {
+        document.getElementById('gyro-prompt').classList.remove('show');
+        startAR(); // запускаем в любом случае
+      });
+  }
+
+  function startAR() {
+    document.getElementById('splash').classList.add('hidden');
+    document.getElementById('ar-scene').style.display = 'block';
+    document.getElementById('hint').classList.remove('hidden');
+
+    const scene = document.querySelector('a-scene');
+
+    const launch = () => {
+      const sys = scene.systems['mindar-image-system'];
+      if (sys) sys.start();
+
+      const target = document.querySelector('[mindar-image-target]');
+      const modelEl = document.getElementById('ar-model');
+
+      if (target) {
+        target.addEventListener('targetFound', () => {
+          markerFound = true;
+          gyroBaseQuaternion = null;
+          deviceQuaternionAtLoss = null;
+
+          // Показываем модель
+          if (modelEl) modelEl.object3D.visible = true;
+
+          document.getElementById('hint').classList.add('hidden');
+          const b = document.getElementById('found-badge');
+          b.classList.add('visible');
+          setTimeout(() => b.classList.remove('visible'), 2000);
+        });
+
+        target.addEventListener('targetLost', () => {
+          markerFound = false;
+          document.getElementById('hint').classList.remove('hidden');
+
+          // Запоминаем поворот устройства в момент потери
+          deviceQuaternionAtLoss = getDeviceQuaternion();
+
+          // Запоминаем мировую позицию и поворот модели
+          if (modelEl) {
+            const worldPos = new THREE.Vector3();
+            const worldQ   = new THREE.Quaternion();
+            modelEl.object3D.getWorldPosition(worldPos);
+            modelEl.object3D.getWorldQuaternion(worldQ);
+            gyroBaseQuaternion = worldQ.clone();
+          }
+        });
+      }
+
+      // Гироскопная стабилизация: когда маркер потерян — удерживаем модель
+      scene.addEventListener('tick', () => {
+        if (markerFound || !gyroBaseQuaternion || !deviceQuaternionAtLoss || !modelEl) return;
+
+        const currentQ = getDeviceQuaternion();
+        if (!currentQ) return;
+
+        // Дельта поворота устройства с момента потери маркера
+        const deltaQ = deviceQuaternionAtLoss.clone().invert().multiply(currentQ);
+
+        // Применяем обратную дельту к последнему известному повороту модели
+        const compensated = gyroBaseQuaternion.clone().multiply(deltaQ.invert());
+
+        // Держим модель на месте относительно мирового пространства
+        const anchor = target.object3D;
+        if (anchor) {
+          anchor.quaternion.copy(compensated);
+        }
+      });
+    };
+
+    if (scene.hasLoaded) {
+      launch();
+    } else {
+      scene.addEventListener('loaded', launch);
+    }
+  }
 </script>
 </body>
 </html>
