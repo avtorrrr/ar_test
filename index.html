@@ -4,227 +4,139 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
   <title>AR Viewer</title>
+  <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image.prod.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/aframe@1.4.2/dist/aframe.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font-family: -apple-system, sans-serif; }
+    body { overflow: hidden; background: #000; font-family: -apple-system, sans-serif; }
 
     #splash {
       position: fixed; inset: 0; z-index: 100;
       background: #0f0f0f;
       display: flex; flex-direction: column;
       align-items: center; justify-content: center;
-      gap: 20px; padding: 32px; text-align: center;
+      gap: 20px; padding: 32px;
     }
-    #splash.hidden { display: none; }
-    .icon {
+    #splash.hidden { opacity: 0; pointer-events: none; }
+    .splash-icon {
       width: 72px; height: 72px;
       background: linear-gradient(135deg, #6B5CE7, #4ECDC4);
       border-radius: 18px;
       display: flex; align-items: center; justify-content: center;
     }
-    .icon svg { width: 36px; height: 36px; }
-    h1 { font-size: 22px; font-weight: 600; color: #fff; }
-    .desc { font-size: 15px; color: #888; line-height: 1.6; max-width: 280px; }
-    .btn {
+    .splash-icon svg { width: 36px; height: 36px; }
+    .splash-title { font-size: 22px; font-weight: 600; color: #fff; text-align: center; }
+    .splash-desc { font-size: 15px; color: #888; text-align: center; line-height: 1.6; max-width: 280px; }
+    .start-btn {
       padding: 16px 40px;
       background: linear-gradient(135deg, #6B5CE7, #4ECDC4);
       color: #fff; border: none; border-radius: 14px;
       font-size: 16px; font-weight: 600; cursor: pointer;
     }
-    #loading {
-      position: fixed; inset: 0; z-index: 90;
-      background: #0f0f0f;
-      display: none; flex-direction: column;
-      align-items: center; justify-content: center;
-      gap: 16px; text-align: center; padding: 32px;
-    }
-    #loading.show { display: flex; }
-    .ring {
-      width: 52px; height: 52px;
-      border: 3px solid #222; border-top-color: #6B5CE7;
-      border-radius: 50%;
-      animation: spin 0.9s linear infinite;
-    }
-    @keyframes spin { to { transform: rotate(360deg); } }
-    #loading-title { font-size: 16px; color: #fff; font-weight: 600; }
-    #loading-status { font-size: 13px; color: #555; }
-    #error {
-      position: fixed; inset: 0; z-index: 95;
-      background: #0f0f0f;
-      display: none; flex-direction: column;
-      align-items: center; justify-content: center;
-      gap: 16px; text-align: center; padding: 32px;
-    }
-    #error.show { display: flex; }
-    #error h2 { font-size: 20px; color: #fff; }
-    #error-msg { font-size: 13px; color: #888; max-width: 300px; line-height: 1.6; word-break: break-word; }
-    #error .btn { background: #222; }
+
     #hint {
       position: fixed; bottom: 40px; left: 50%; transform: translateX(-50%);
-      background: rgba(0,0,0,0.65);
+      background: rgba(0,0,0,0.6);
       backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
       color: #fff; padding: 12px 24px; border-radius: 100px;
-      font-size: 14px; pointer-events: none; z-index: 50;
-      white-space: nowrap; display: none;
+      font-size: 14px; pointer-events: none; z-index: 10;
+      transition: opacity 0.5s;
     }
-    #hint.show { display: block; }
-    #badge {
+    #hint.hidden { opacity: 0; }
+
+    #found-badge {
       position: fixed; top: 32px; left: 50%; transform: translateX(-50%);
-      background: rgba(78,205,196,0.15); border: 1px solid rgba(78,205,196,0.4);
+      background: rgba(78,205,196,0.2); border: 1px solid rgba(78,205,196,0.5);
       color: #4ECDC4; padding: 8px 20px; border-radius: 100px;
-      font-size: 14px; font-weight: 600; pointer-events: none; z-index: 50;
-      white-space: nowrap; opacity: 0; transition: opacity 0.4s;
+      font-size: 14px; font-weight: 600;
+      opacity: 0; transition: opacity 0.4s;
+      pointer-events: none; z-index: 20; white-space: nowrap;
     }
-    #badge.show { opacity: 1; }
+    #found-badge.visible { opacity: 1; }
+
+    a-scene { width: 100vw !important; height: 100vh !important; }
   </style>
 </head>
 <body>
 
 <div id="splash">
-  <div class="icon">
+  <div class="splash-icon">
     <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
       <path d="M12 2L2 7l10 5 10-5-10-5z"/>
       <path d="M2 17l10 5 10-5"/>
       <path d="M2 12l10 5 10-5"/>
     </svg>
   </div>
-  <h1>AR Viewer</h1>
-  <p class="desc">Наведите камеру на карточку — 3D модель появится прямо на ней</p>
-  <button class="btn" id="start-btn">Открыть камеру</button>
+  <div class="splash-title">AR Viewer</div>
+  <div class="splash-desc">Наведите камеру на карточку — 3D модель появится прямо на ней</div>
+  <button class="start-btn" onclick="startAR()">Открыть камеру</button>
 </div>
 
-<div id="loading">
-  <div class="ring"></div>
-  <div id="loading-title">Загружаем AR…</div>
-  <div id="loading-status">Инициализация…</div>
-</div>
+<div id="hint" class="hidden">Наведите камеру на маркер</div>
+<div id="found-badge">Маркер найден</div>
 
-<div id="error">
-  <h2>Ошибка</h2>
-  <div id="error-msg"></div>
-  <button class="btn" onclick="location.reload()">Попробовать снова</button>
-</div>
+<a-scene
+  id="ar-scene"
+  mindar-image="imageTargetSrc: targets.mind; autoStart: false; uiLoading: no; uiScanning: no; uiError: no;"
+  color-space="sRGB"
+  renderer="colorManagement: true; physicallyCorrectLights: true"
+  vr-mode-ui="enabled: false"
+  device-orientation-permission-ui="enabled: false"
+  style="display:none"
+>
+  <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
 
-<div id="hint">Наведите камеру на маркер</div>
-<div id="badge">Маркер найден</div>
+  <a-entity mindar-image-target="targetIndex: 0">
+    <!--
+      Меняйте эти параметры под вашу модель:
+      scale — размер (1 = размер маркера, 0.5 = половина маркера)
+      rotation — поворот в градусах
+      position — смещение (третье число = высота над маркером)
+    -->
+    <a-gltf-model
+      src="model.glb"
+      position="0 0 0.3"
+      rotation="0 0 0"
+      scale="1 1 1"
+      animation-mixer
+    ></a-gltf-model>
+  </a-entity>
 
-<!-- Версия 1.1.5 — стабильная, через window.MINDAR.IMAGE -->
-<script src="https://cdn.jsdelivr.net/npm/mind-ar@1.1.5/dist/mindar-image-three.prod.js"></script>
+</a-scene>
 
-<script type="module">
-// ─── НАСТРОЙКИ ────────────────────────────
-const MODEL_URL  = 'model.glb';
-const TARGET_URL = 'targets.mind';
-const MODEL_SCALE    = 0.15;
-const MODEL_POS      = [0, 0, 0];
-const MODEL_ROT_DEG  = [0, 0, 0]; // градусы X Y Z
-// ──────────────────────────────────────────
+<script>
+function startAR() {
+  document.getElementById('splash').classList.add('hidden');
+  document.getElementById('ar-scene').style.display = 'block';
+  document.getElementById('hint').classList.remove('hidden');
 
-const $ = id => document.getElementById(id);
-const setStatus = t => { $('loading-status').textContent = t; };
+  const scene = document.querySelector('a-scene');
 
-function showError(msg) {
-  $('loading').classList.remove('show');
-  $('error-msg').textContent = msg;
-  $('error').classList.add('show');
-}
+  const launch = () => {
+    const sys = scene.systems['mindar-image-system'];
+    if (sys) sys.start();
 
-$('start-btn').addEventListener('click', async () => {
-  $('splash').classList.add('hidden');
-  $('loading').classList.add('show');
-  setStatus('Проверка библиотеки…');
-
-  const MINDAR = window.MINDAR?.IMAGE;
-  if (!MINDAR) {
-    showError('Библиотека MindAR не загрузилась. Проверьте интернет-соединение и перезагрузите страницу.');
-    return;
-  }
-
-  const THREE = MINDAR.THREE;
-  const MindARThree = MINDAR.MindARThree;
-
-  setStatus('Запрос камеры…');
-  try {
-    const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-    s.getTracks().forEach(t => t.stop());
-  } catch(e) {
-    showError('Нет доступа к камере (' + e.name + '). Разрешите доступ в настройках браузера.');
-    return;
-  }
-
-  setStatus('Инициализация MindAR…');
-  let mindarThree;
-  try {
-    mindarThree = new MindARThree({
-      container: document.body,
-      imageTargetSrc: TARGET_URL,
-      uiLoading: 'no',
-      uiScanning: 'no',
-      uiError: 'no',
-    });
-  } catch(e) {
-    showError('Ошибка MindAR: ' + e.message);
-    return;
-  }
-
-  const { renderer, scene, camera } = mindarThree;
-
-  scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 1.5));
-  const dir = new THREE.DirectionalLight(0xffffff, 1);
-  dir.position.set(1, 2, 1);
-  scene.add(dir);
-
-  const anchor = mindarThree.addAnchor(0);
-
-  setStatus('Загрузка 3D модели…');
-  try {
-    const { GLTFLoader } = await import('https://unpkg.com/three@0.154.0/examples/jsm/loaders/GLTFLoader.js');
-    const gltf = await new Promise((res, rej) => new GLTFLoader().load(MODEL_URL, res, undefined, rej));
-
-    const model = gltf.scene;
-    model.scale.setScalar(MODEL_SCALE);
-    model.position.set(...MODEL_POS);
-    model.rotation.set(
-      THREE.MathUtils.degToRad(MODEL_ROT_DEG[0]),
-      THREE.MathUtils.degToRad(MODEL_ROT_DEG[1]),
-      THREE.MathUtils.degToRad(MODEL_ROT_DEG[2])
-    );
-    anchor.group.add(model);
-
-    if (gltf.animations?.length > 0) {
-      const mixer = new THREE.AnimationMixer(model);
-      gltf.animations.forEach(c => mixer.clipAction(c).play());
-      const clock = new THREE.Clock();
-      renderer.setAnimationLoop(() => {
-        mixer.update(clock.getDelta());
-        renderer.render(scene, camera);
+    const target = document.querySelector('[mindar-image-target]');
+    if (target) {
+      target.addEventListener('targetFound', () => {
+        document.getElementById('hint').classList.add('hidden');
+        const b = document.getElementById('found-badge');
+        b.classList.add('visible');
+        setTimeout(() => b.classList.remove('visible'), 2000);
+      });
+      target.addEventListener('targetLost', () => {
+        document.getElementById('hint').classList.remove('hidden');
       });
     }
-  } catch(e) {
-    showError('Не удалось загрузить model.glb. Убедитесь что файл лежит рядом с index.html.\n\n' + e.message);
-    return;
-  }
-
-  anchor.onTargetFound = () => {
-    $('hint').classList.remove('show');
-    $('badge').classList.add('show');
-    setTimeout(() => $('badge').classList.remove('show'), 2000);
   };
-  anchor.onTargetLost = () => $('hint').classList.add('show');
 
-  setStatus('Запуск камеры…');
-  try {
-    await mindarThree.start();
-  } catch(e) {
-    showError('Ошибка запуска камеры: ' + e.message);
-    return;
+  if (scene.hasLoaded) {
+    launch();
+  } else {
+    scene.addEventListener('loaded', launch);
   }
-
-  $('loading').classList.remove('show');
-  $('hint').classList.add('show');
-
-  renderer.setAnimationLoop(() => renderer.render(scene, camera));
-});
+}
 </script>
 </body>
 </html>
